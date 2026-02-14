@@ -1,0 +1,162 @@
+{
+  "basePrices": {
+    "p8": 24500,
+    "p10": 24200,
+    "p12": 23900
+  },
+  "districts": [
+    {
+      "name": "Arnavutköy",
+      "cost": 5000
+    },
+    {
+      "name": "Ataşehir",
+      "cost": 300
+    },
+    {
+      "name": "Avcılar",
+      "cost": 100
+    },
+    {
+      "name": "Bağcılar",
+      "cost": 150
+    },
+    {
+      "name": "Bahçelievler",
+      "cost": 150
+    },
+    {
+      "name": "Bakırköy",
+      "cost": 200
+    },
+    {
+      "name": "Başakşehir",
+      "cost": 250
+    },
+    {
+      "name": "Bayrampaşa",
+      "cost": 200
+    },
+    {
+      "name": "Beşiktaş",
+      "cost": 350
+    },
+    {
+      "name": "Beykoz",
+      "cost": 400
+    },
+    {
+      "name": "Beylikdüzü",
+      "cost": 50
+    },
+    {
+      "name": "Beyoğlu",
+      "cost": 300
+    },
+    {
+      "name": "Büyükçekmece",
+      "cost": 150
+    },
+    {
+      "name": "Çatalca",
+      "cost": 600
+    },
+    {
+      "name": "Çekmeköy",
+      "cost": 350
+    },
+    {
+      "name": "Esenler",
+      "cost": 200
+    },
+    {
+      "name": "Esenyurt",
+      "cost": 0
+    },
+    {
+      "name": "Eyüpsultan",
+      "cost": 250
+    },
+    {
+      "name": "Fatih",
+      "cost": 300
+    },
+    {
+      "name": "Gaziosmanpaşa",
+      "cost": 250
+    },
+    {
+      "name": "Güngören",
+      "cost": 200
+    },
+    {
+      "name": "Kadıköy",
+      "cost": 350
+    },
+    {
+      "name": "Kağıthane",
+      "cost": 250
+    },
+    {
+      "name": "Kartal",
+      "cost": 300
+    },
+    {
+      "name": "Küçükçekmece",
+      "cost": 150
+    },
+    {
+      "name": "Maltepe",
+      "cost": 300
+    },
+    {
+      "name": "Pendik",
+      "cost": 350
+    },
+    {
+      "name": "Sancaktepe",
+      "cost": 400
+    },
+    {
+      "name": "Sarıyer",
+      "cost": 400
+    },
+    {
+      "name": "Silivri",
+      "cost": 700
+    },
+    {
+      "name": "Sultanbeyli",
+      "cost": 400
+    },
+    {
+      "name": "Sultangazi",
+      "cost": 300
+    },
+    {
+      "name": "Şile",
+      "cost": 800
+    },
+    {
+      "name": "Şişli",
+      "cost": 300
+    },
+    {
+      "name": "Tuzla",
+      "cost": 400
+    },
+    {
+      "name": "Ümraniye",
+      "cost": 350
+    },
+    {
+      "name": "Üsküdar",
+      "cost": 350
+    },
+    {
+      "name": "Zeytinburnu",
+      "cost": 250
+    }
+  ],
+  "lastUpdated": "2026-02-14T14:38:16.189Z"
+}
