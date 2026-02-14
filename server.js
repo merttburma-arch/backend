@@ -7,27 +7,33 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// ==== ZORUNLU ENV (prod için) ====
+// Railway prod ortamında PORT mutlaka process.env.PORT'tan gelir
+const PORT = Number(process.env.PORT || 5000);
+
+// Reverse proxy (Railway) arkasında doğru davranması için
+app.set("trust proxy", 1);
+
+// ===== ENV =====
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-only";
 if (!process.env.JWT_SECRET) {
     console.warn("JWT_SECRET env missing. Development fallback will be used.");
 }
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-only";
 
-// ==== CORS (GitHub Pages + local) ====
-const allowedOrigins = [
+// GitHub Pages origin (env ile yönet)
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://merttburma-arch.github.io";
+
+// ===== CORS =====
+const allowedOrigins = new Set([
     "http://localhost:3000",
-    "https://merttburma-arch.github.io",
-];
+    FRONTEND_ORIGIN,
+]);
 
-// Not: GitHub Pages request'lerinde Origin header genelde
-// https://merttburma-arch.github.io olur.
 app.use(
     cors({
         origin: function (origin, cb) {
             if (!origin) return cb(null, true); // curl/postman
-            if (allowedOrigins.includes(origin)) return cb(null, true);
+            if (allowedOrigins.has(origin)) return cb(null, true);
             return cb(new Error("CORS not allowed: " + origin));
         },
     })
@@ -35,19 +41,21 @@ app.use(
 
 app.use(express.json());
 
-// ==== DATA PATH (Render/Railway gibi yerlerde yazılabilir dizin için) ====
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+// ===== DATA PATH =====
+// Railway’de yazılabilir ve kolay olan: /tmp
+// Sen env vermezsen otomatik /tmp/eyupogullar-data kullanacağız.
+const DATA_DIR = process.env.DATA_DIR || "/tmp/eyupogullar-data";
 const PRICES_FILE = path.join(DATA_DIR, "prices.json");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 
-// ==== Email transporter (env varsa) ====
+// ===== Email transporter =====
 let transporter = null;
 if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     transporter = nodemailer.createTransport({
         service: "gmail",
         auth: {
             user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS, // Gmail App Password
+            pass: process.env.EMAIL_PASS,
         },
     });
 } else {
@@ -63,7 +71,7 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
-// ==== ensure data files ====
+// ===== ensure data files =====
 async function ensureDataFiles() {
     await fs.mkdir(DATA_DIR, { recursive: true });
 
@@ -133,7 +141,7 @@ async function ensureDataFiles() {
     }
 }
 
-// ==== JWT middleware ====
+// ===== JWT middleware =====
 function authenticateToken(req, res, next) {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
@@ -147,9 +155,8 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// ==== routes ====
-
-app.get("/health", (req, res) => res.json({ ok: true }));
+// ===== routes =====
+app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
 app.post("/api/login", async (req, res) => {
     try {
@@ -221,9 +228,7 @@ app.post("/api/contact", async (req, res) => {
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: process.env.EMAIL_USER,
-            subject: `Yeni İletişim Formu Mesajı - ${escapeHtml(name)} ${escapeHtml(
-                surname
-            )}`,
+            subject: `Yeni İletişim Formu Mesajı - ${escapeHtml(name)} ${escapeHtml(surname)}`,
             html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #1e40af; color: white; padding: 20px; text-align: center;">
@@ -232,25 +237,15 @@ app.post("/api/contact", async (req, res) => {
           </div>
 
           <div style="padding: 20px; background: #f9fafb;">
-            <div style="margin-bottom: 15px;"><strong>Adı:</strong> ${escapeHtml(
-                name
-            )}</div>
-            <div style="margin-bottom: 15px;"><strong>Soyadı:</strong> ${escapeHtml(
-                surname
-            )}</div>
-            <div style="margin-bottom: 15px;"><strong>E-posta:</strong> ${escapeHtml(
-                email
-            )}</div>
+            <div style="margin-bottom: 15px;"><strong>Adı:</strong> ${escapeHtml(name)}</div>
+            <div style="margin-bottom: 15px;"><strong>Soyadı:</strong> ${escapeHtml(surname)}</div>
+            <div style="margin-bottom: 15px;"><strong>E-posta:</strong> ${escapeHtml(email)}</div>
             <div style="margin-bottom: 15px;"><strong>Mesaj:</strong></div>
-            <div style="background: white; padding: 15px; border-left: 4px solid #1e40af; white-space: pre-wrap;">${escapeHtml(
-                message
-            )}</div>
+            <div style="background: white; padding: 15px; border-left: 4px solid #1e40af; white-space: pre-wrap;">${escapeHtml(message)}</div>
           </div>
 
           <div style="background: #1f2937; color: white; padding: 15px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">Bu mesaj ${new Date().toLocaleString(
-                "tr-TR"
-            )} tarihinde gönderildi.</p>
+            <p style="margin: 0;">Bu mesaj ${new Date().toLocaleString("tr-TR")} tarihinde gönderildi.</p>
           </div>
         </div>
       `,
@@ -272,9 +267,28 @@ app.get("/", (req, res) => {
     res.json({ message: "Eyüboğulları İnşaat Backend API" });
 });
 
+// ===== start + graceful shutdown =====
+let server;
+
 async function startServer() {
     await ensureDataFiles();
-    app.listen(PORT, () => console.log(`Server listening on :${PORT}`));
+    server = app.listen(PORT, () => console.log(`Server listening on :${PORT}`));
 }
 
 startServer();
+
+process.on("SIGTERM", () => {
+    console.log("SIGTERM received. Shutting down gracefully...");
+    if (!server) return process.exit(0);
+
+    server.close(() => {
+        console.log("Server closed.");
+        process.exit(0);
+    });
+
+    // 10 sn içinde kapanmazsa zorla
+    setTimeout(() => {
+        console.log("Force exit.");
+        process.exit(1);
+    }, 10_000);
+});
