@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs").promises;
@@ -6,17 +5,15 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// Resend (npm i resend)
-const { Resend } = require("resend");
-
+// local geliştirme için .env yükle (Railway'de env zaten panelden gelir)
 require("dotenv").config();
 
 const app = express();
 
-// Railway prod ortamında PORT mutlaka process.env.PORT’tan gelir
+// Railway prod ortamında PORT mutlaka process.env.PORT'tan gelir
 const PORT = Number(process.env.PORT || 5000);
 
-// Reverse proxy arkasında doğru davranması için
+// Reverse proxy (Railway) arkasında doğru davranması için
 app.set("trust proxy", 1);
 
 // ===== ENV =====
@@ -25,7 +22,7 @@ if (!process.env.JWT_SECRET) {
     console.warn("JWT_SECRET env missing. Development fallback will be used.");
 }
 
-// Frontend origin (GitHub Pages)
+// GitHub Pages origin (env ile yönet)
 const FRONTEND_ORIGIN =
     process.env.FRONTEND_ORIGIN || "https://merttburma-arch.github.io";
 
@@ -46,20 +43,50 @@ app.use(
 app.use(express.json());
 
 // ===== DATA PATH =====
+// Railway’de yazılabilir ve kolay olan: /tmp
 const DATA_DIR = process.env.DATA_DIR || "/tmp/eyupogullar-data";
 const PRICES_FILE = path.join(DATA_DIR, "prices.json");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 
-// ===== Resend =====
+// ===== RESEND (EMAIL) =====
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const EMAIL_FROM = process.env.EMAIL_FROM || "Eyüboğulları <onboarding@resend.dev>";
 const EMAIL_TO = process.env.EMAIL_TO || "eyubogullariinsaat@gmail.com";
+const EMAIL_FROM = process.env.EMAIL_FROM || "onboarding@resend.dev";
 
-let resend = null;
-if (RESEND_API_KEY) {
-    resend = new Resend(RESEND_API_KEY);
-} else {
-    console.warn("RESEND_API_KEY missing. /api/contact will return 503.");
+// Lazy import (sadece contact gelince kullan)
+async function sendMailWithResend({ name, surname, email, message }) {
+    if (!RESEND_API_KEY) {
+        return { ok: false, status: 503, error: "RESEND_API_KEY tanımlı değil" };
+    }
+
+    const { Resend } = await import("resend");
+    const resend = new Resend(RESEND_API_KEY);
+
+    // reply_to: kullanıcı maili => Gmail'de "Yanıtla" ile kullanıcıya dönersin
+    const subject = `Yeni İletişim Formu Mesajı - ${escapeHtml(name)} ${escapeHtml(
+        surname
+    )}`;
+
+    const html = `<div>
+    <p><b>Ad:</b> ${escapeHtml(name)}</p>
+    <p><b>Soyad:</b> ${escapeHtml(surname)}</p>
+    <p><b>Email:</b> ${escapeHtml(email)}</p>
+    <p><b>Mesaj:</b><br/> ${escapeHtml(message)}</p>
+  </div>`;
+
+    try {
+        const result = await resend.emails.send({
+            from: EMAIL_FROM,
+            to: [EMAIL_TO],
+            subject,
+            html,
+            reply_to: email,
+        });
+
+        return { ok: true, result };
+    } catch (e) {
+        return { ok: false, status: 500, error: e?.message || "Resend hata" };
+    }
 }
 
 function escapeHtml(str) {
@@ -81,7 +108,6 @@ async function ensureDataFiles() {
         lastUpdated: new Date().toISOString(),
     };
 
-    // users.json yapın: { "admin": { ... } }
     const defaultUsers = {
         admin: {
             username: "admin",
@@ -124,7 +150,6 @@ app.get("/", (req, res) => {
     res.json({ message: "Eyüboğulları İnşaat Backend API" });
 });
 
-// LOGIN
 app.post("/api/login", async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -144,23 +169,19 @@ app.post("/api/login", async (req, res) => {
 
         res.json({ token, user: { username: u, role: user.role } });
     } catch (e) {
-        console.error("Login error:", e);
         res.status(500).json({ error: "Giriş yapılamadı" });
     }
 });
 
-// PRICES (GET)
 app.get("/api/prices", async (req, res) => {
     try {
         const pricesData = await fs.readFile(PRICES_FILE, "utf8");
         res.json(JSON.parse(pricesData));
     } catch (e) {
-        console.error("Prices get error:", e);
         res.status(500).json({ error: "Fiyatlar alınamadı" });
     }
 });
 
-// PRICES (PUT) - protected
 app.put("/api/prices", authenticateToken, async (req, res) => {
     try {
         if (req.user.role !== "admin") {
@@ -181,57 +202,32 @@ app.put("/api/prices", authenticateToken, async (req, res) => {
         await fs.writeFile(PRICES_FILE, JSON.stringify(updatedPrices, null, 2));
         res.json(updatedPrices);
     } catch (e) {
-        console.error("Prices put error:", e);
         res.status(500).json({ error: "Fiyatlar güncellenemedi" });
     }
 });
 
-// CONTACT (Resend)
 app.post("/api/contact", async (req, res) => {
     try {
-        if (!resend) {
-            return res.status(503).json({ error: "E-posta servisi yapılandırılmadı" });
-        }
-
         const { name, surname, email, message } = req.body;
+
         if (!name || !surname || !email || !message) {
             return res.status(400).json({ error: "Tüm alanlar zorunludur" });
         }
 
-        const safeName = escapeHtml(name);
-        const safeSurname = escapeHtml(surname);
-        const safeEmail = escapeHtml(email);
-        const safeMessage = escapeHtml(message);
+        const sent = await sendMailWithResend({ name, surname, email, message });
 
-        const subject = `Yeni İletişim Formu Mesajı - ${safeName} ${safeSurname}`;
-
-        const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6">
-        <h2>Yeni İletişim Formu Mesajı</h2>
-        <p><b>Ad:</b> ${safeName}</p>
-        <p><b>Soyad:</b> ${safeSurname}</p>
-        <p><b>Email:</b> ${safeEmail}</p>
-        <p><b>Mesaj:</b><br/> ${safeMessage}</p>
-      </div>
-    `;
-
-        const result = await resend.emails.send({
-            from: EMAIL_FROM,           // örn: "Eyüboğulları <onboarding@resend.dev>" veya domain doğruladıysan "info@domain.com"
-            to: [EMAIL_TO],             // mailin gideceği yer (senin mailin)
-            reply_to: email,            // cevapla dediğinde kullanıcıya dönsün
-            subject,
-            html,
-        });
-
-        // Resend hata döndürürse:
-        if (result.error) {
-            console.error("Resend error:", result.error);
-            return res.status(500).json({ error: "Mesaj gönderilemedi." });
+        if (!sent.ok) {
+            return res
+                .status(sent.status || 500)
+                .json({ error: sent.error || "Mesaj gönderilemedi." });
         }
 
-        res.json({ success: true, message: "Mesajınız başarıyla gönderildi." });
+        res.json({
+            success: true,
+            message: "Mesajınız başarıyla gönderildi.",
+        });
     } catch (e) {
-        console.error("Contact error:", e);
+        console.error("Contact hata:", e);
         res.status(500).json({ error: "Mesaj gönderilemedi." });
     }
 });
